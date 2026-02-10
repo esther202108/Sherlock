@@ -13,8 +13,10 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 st.set_page_config(page_title="ClearID Check", layout="wide")
 st.title("🕵️‍♂️ Mr. Sherlock")
-st.caption("Spotting what’s changed, one name at a time. Quickly identify new and removed personnel(s) by comparing vendor rosters")
-
+st.caption(
+    "Spotting what’s changed, one name at a time.\n"
+    "Quickly identify new and removed personnel by comparing vendor rosters."
+)
 NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
 
