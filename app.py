@@ -9,31 +9,25 @@ NAME_COL = "Full Name As Per NRIC"
 
 # ---------- Helpers ----------
 def pick_sheet(file, key_prefix: str) -> tuple[pd.DataFrame, str]:
-    """
-    Load an uploaded Excel file and let user pick the sheet.
-    Supports .xlsx and .xls by choosing an engine based on extension.
-    """
     ext = file.name.lower().split(".")[-1]
     engine = "openpyxl" if ext == "xlsx" else "xlrd"
 
     xl = pd.ExcelFile(file, engine=engine)
-    sheet = st.selectbox(f"Sheet ({file.name})", xl.sheet_names, key=f"{key_prefix}_sheet")
+    sheet = st.selectbox(
+        f"Sheet ({file.name})",
+        xl.sheet_names,
+        key=f"{key_prefix}_sheet"
+    )
     df = xl.parse(sheet)
     return df, sheet
 
 def normalize_name(s: pd.Series) -> pd.Series:
-    """
-    Normalize names to avoid mismatches due to spacing/casing.
-    """
     s = s.astype(str).fillna("").str.strip()
-    s = s.str.replace(r"\s+", " ", regex=True)  # collapse multiple spaces
+    s = s.str.replace(r"\s+", " ", regex=True)
     s = s.str.upper()
     return s
 
 def to_xlsx_bytes(df_dict: dict) -> bytes:
-    """
-    Export multiple DataFrames into one Excel file (multiple sheets).
-    """
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         for sheet_name, df in df_dict.items():
@@ -78,13 +72,6 @@ if file_a and file_b:
     a_set = set(a_norm[a_norm != ""].tolist())
     b_set = set(b_norm[b_norm != ""].tolist())
 
-    # Build flagged B (new list)
-    flagged_b = df_b.copy()
-    flagged_b["_name_norm"] = b_norm
-    flagged_b["is_new"] = ~flagged_b["_name_norm"].isin(a_set)
-    flagged_b["flag"] = flagged_b["is_new"].map(lambda x: "NEW" if x else "")
-
-    # Summaries
     new_names = sorted(list(b_set - a_set))
     removed_names = sorted(list(a_set - b_set))
 
@@ -97,35 +84,32 @@ if file_a and file_b:
     )
 
     # ---------- Views ----------
-    st.subheader("3) View")
-    view_mode = st.radio(
-        "View mode",
-        ["All B (flagged)", "Only NEW in B", "New & Removed lists"],
-        horizontal=True
-    )
+    st.subheader("3) Results")
+    c1, c2 = st.columns(2)
 
-    if view_mode == "All B (flagged)":
-        st.dataframe(flagged_b.drop(columns=["_name_norm"]), use_container_width=True)
+    with c1:
+        st.markdown("### 🆕 New in Excel B")
+        if new_names:
+            st.dataframe(
+                pd.DataFrame({NAME_COL: new_names}),
+                use_container_width=True
+            )
+        else:
+            st.info("No new names found.")
 
-    elif view_mode == "Only NEW in B":
-        st.dataframe(
-            flagged_b[flagged_b["is_new"]].drop(columns=["_name_norm"]),
-            use_container_width=True
-        )
-
-    else:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("### New in B")
-            st.dataframe(pd.DataFrame({NAME_COL: new_names}), use_container_width=True)
-        with c2:
-            st.markdown("### Removed from B")
-            st.dataframe(pd.DataFrame({NAME_COL: removed_names}), use_container_width=True)
+    with c2:
+        st.markdown("### ❌ Removed from Excel B")
+        if removed_names:
+            st.dataframe(
+                pd.DataFrame({NAME_COL: removed_names}),
+                use_container_width=True
+            )
+        else:
+            st.info("No removed names found.")
 
     # ---------- Download ----------
     st.subheader("4) Download results")
     xlsx_bytes = to_xlsx_bytes({
-        "B_flagged": flagged_b.drop(columns=["_name_norm"]),
         "New_in_B": pd.DataFrame({NAME_COL: new_names}),
         "Removed_from_B": pd.DataFrame({NAME_COL: removed_names}),
     })
