@@ -17,6 +17,7 @@ NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
 
 # Fixed column widths (EXACT match to US Cleaner)
+# NOTE: This works reliably only when your output columns align with A..M positions.
 COLUMN_WIDTHS = {
     "A": 3.38,   # S/N
     "C": 23.06,
@@ -54,8 +55,8 @@ def normalize_name(s: pd.Series) -> pd.Series:
 def add_serial_number(df: pd.DataFrame) -> pd.DataFrame:
     df = df.reset_index(drop=True).copy()
 
-    # Remove any existing serial column
-    for c in ["S/N", "SN", "No", "No.", "Index", "Serial", "Serial No"]:
+    # Remove any existing serial column (common variations)
+    for c in ["S/N", "SN", "SNO", "S. NO", "S. NO.", "S NO", "S NO.", "No", "No.", "Index", "Serial", "Serial No"]:
         if c in df.columns:
             df.drop(columns=[c], inplace=True)
 
@@ -93,9 +94,17 @@ def apply_us_style(ws):
         ws.row_dimensions[r].height = 20
 
 def apply_fixed_column_widths(ws):
+    """
+    IMPORTANT FIX:
+    - Set widths UNCONDITIONALLY (do not check membership).
+    - Also set S/N (A) explicitly even if not in the mapping.
+    """
+    # Always force S/N column narrower
+    ws.column_dimensions["A"].width = COLUMN_WIDTHS.get("A", 3.38)
+
+    # Apply the rest
     for col_letter, width in COLUMN_WIDTHS.items():
-        if col_letter in ws.column_dimensions:
-            ws.column_dimensions[col_letter].width = width
+        ws.column_dimensions[col_letter].width = width
 
 def build_workbook(sheets: dict[str, pd.DataFrame]) -> bytes:
     wb = Workbook()
@@ -136,11 +145,15 @@ if file_a and file_b:
     a_norm = normalize_name(df_a[NAME_COL])
     b_norm = normalize_name(df_b[NAME_COL])
 
-    new_set = set(b_norm) - set(a_norm)
-    removed_set = set(a_norm) - set(b_norm)
+    # Remove blanks before set operations (prevents '' being treated as a name)
+    a_set = set(a_norm[a_norm != ""].tolist())
+    b_set = set(b_norm[b_norm != ""].tolist())
 
-    new_rows = df_b.loc[b_norm.isin(new_set)]
-    removed_rows = df_a.loc[a_norm.isin(removed_set)]
+    new_set = b_set - a_set
+    removed_set = a_set - b_set
+
+    new_rows = df_b.loc[b_norm.isin(new_set)].copy()
+    removed_rows = df_a.loc[a_norm.isin(removed_set)].copy()
 
     new_out = add_serial_number(new_rows)
     removed_out = add_serial_number(removed_rows)
@@ -162,21 +175,27 @@ if file_a and file_b:
     l, r = st.columns(2)
     with l:
         st.markdown("### 🆕 New in Excel B")
-        st.dataframe(
-            new_out[[SERIAL_COL, NAME_COL]],
-            hide_index=True,
-            use_container_width=True,
-            column_config=col_cfg,
-        )
+        if not new_out.empty:
+            st.dataframe(
+                new_out[[SERIAL_COL, NAME_COL]],
+                hide_index=True,
+                use_container_width=True,
+                column_config=col_cfg,
+            )
+        else:
+            st.info("No new names found in Excel B.")
 
     with r:
         st.markdown("### ❌ Removed from Excel A")
-        st.dataframe(
-            removed_out[[SERIAL_COL, NAME_COL]],
-            hide_index=True,
-            use_container_width=True,
-            column_config=col_cfg,
-        )
+        if not removed_out.empty:
+            st.dataframe(
+                removed_out[[SERIAL_COL, NAME_COL]],
+                hide_index=True,
+                use_container_width=True,
+                column_config=col_cfg,
+            )
+        else:
+            st.info("No names removed from Excel A.")
 
     # Download
     st.subheader("4) Download results")
