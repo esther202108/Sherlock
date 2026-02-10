@@ -135,7 +135,7 @@ with st.container(border=True):
     with c1:
         file_a = st.file_uploader("Excel A (Baseline)", type=["xlsx", "xls"])
     with c2:
-        file_b = st.file_uploader("Excel B (Current)", type=["xlsx", "xls"])
+        file_b = st.file_uploader("Excel B (Compare)", type=["xlsx", "xls"])
 
 if file_a and file_b:
     with st.container(border=True):
