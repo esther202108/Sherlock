@@ -122,7 +122,6 @@ with st.expander("How it works", expanded=False):
         """
         - **Excel A (Baseline):** your previous roster  
         - **Excel B (Current):** current roster to compare  
-        - We compare using **Full Name As Per NRIC**
         - Output includes:
           - **New in Excel B**
           - **Removed from Excel A**
