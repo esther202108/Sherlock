@@ -11,7 +11,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # Streamlit setup
 # ─────────────────────────────────────────────────────────────
 st.set_page_config(page_title="NRIC Name Comparator", layout="wide")
-st.title("Compare Two Vendor Lists (Full Name As Per NRIC)")
+st.title("ClearID Compare")
 
 NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
