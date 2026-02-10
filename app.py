@@ -10,6 +10,8 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # ─────────────────────────────────────────────────────────────
 # Streamlit setup (more professional UX)
 # ─────────────────────────────────────────────────────────────
+st.button("Theme test button", type="primary")
+
 st.set_page_config(page_title="ClearID Check", layout="wide")
 st.title("🪪 ClearID Check")
 st.caption("Quickly identify new and removed personnel by comparing vendor rosters")
