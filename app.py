@@ -122,7 +122,7 @@ with st.expander("How it works", expanded=False):
     st.markdown(
         """
         - **Excel A (Baseline):** Previous roster  
-        - **Excel B (Current):** Current roster to compare  
+        - **Excel B (Current):** Current roster
         - Output includes:
           - **New in Excel B**
           - **Removed from Excel A**
