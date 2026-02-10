@@ -25,14 +25,14 @@ def pick_sheet(file, key_prefix: str) -> tuple[pd.DataFrame, str]:
 
 def normalize_name(s: pd.Series) -> pd.Series:
     s = s.astype(str).fillna("").str.strip()
-    s = s.str.replace(r"\s+", " ", regex=True)  # collapse multiple spaces
+    s = s.str.replace(r"\s+", " ", regex=True)
     s = s.str.upper()
     return s
 
 def add_serial_number(df: pd.DataFrame) -> pd.DataFrame:
     df_out = df.reset_index(drop=True).copy()
 
-    # Drop existing serial-like columns to avoid "cannot insert already exists"
+    # Drop existing serial-like columns first
     serial_candidates = [
         "S/N", "SN", "SNO", "S. NO", "S. NO.", "S NO", "S NO.",
         "NO", "No", "No.", "Serial No", "Serial", "Index"
@@ -44,57 +44,58 @@ def add_serial_number(df: pd.DataFrame) -> pd.DataFrame:
     df_out.insert(0, SERIAL_COL, range(1, len(df_out) + 1))
     return df_out
 
-def style_worksheet_like_us(ws):
-    # Same “look” as your US cleaner output
+def style_worksheet_exact_like_us(ws):
+    """
+    Match your US Cleaner styling:
+    - Header fill green (94B455), bold Calibri 9
+    - Borders thin, center alignment
+    - Freeze top row
+    - Auto-fit columns using max string length + 2 (no caps)
+    - Row height 20
+    """
     header_fill  = PatternFill("solid", fgColor="94B455")
     border       = Border(Side("thin"), Side("thin"), Side("thin"), Side("thin"))
-    center       = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    center       = Alignment(horizontal="center", vertical="center")
     normal_font  = Font(name="Calibri", size=9)
     bold_font    = Font(name="Calibri", size=9, bold=True)
 
-    # Apply borders/alignment/font to all cells
+    # 1) Apply borders, alignment, font to all cells
     for row in ws.iter_rows():
         for cell in row:
             cell.border = border
             cell.alignment = center
             cell.font = normal_font
 
-    # Style header row
+    # 2) Style header row
     for col in range(1, ws.max_column + 1):
         h = ws[f"{get_column_letter(col)}1"]
         h.fill = header_fill
         h.font = bold_font
 
-    # Freeze top row
+    # 3) Freeze top row
     ws.freeze_panes = "A2"
 
-    # Auto-fit columns & set row height
+    # 4) Auto-fit columns & set row height (EXACT same logic as your US Cleaner)
     for col in ws.columns:
-        max_len = 0
-        for cell in col:
-            if cell.value is not None:
-                max_len = max(max_len, len(str(cell.value)))
-        width = max(max_len, 10) + 2
-        ws.column_dimensions[get_column_letter(col[0].column)].width = min(width, 60)
+        values = [len(str(cell.value)) for cell in col if cell.value is not None]
+        width = max(values) if values else 10
+        ws.column_dimensions[get_column_letter(col[0].column)].width = width + 2
 
-    for r in range(1, ws.max_row + 1):
-        ws.row_dimensions[r].height = 20
+    for row in ws.iter_rows():
+        ws.row_dimensions[row[0].row].height = 20
 
-def build_styled_workbook(sheets: dict[str, pd.DataFrame]) -> bytes:
+def build_styled_workbook_exact_like_us(sheets: dict[str, pd.DataFrame]) -> bytes:
     wb = Workbook()
-    # Remove default sheet
     default = wb.active
     wb.remove(default)
 
     for sheet_name, df in sheets.items():
         ws = wb.create_sheet(title=sheet_name[:31])
 
-        # Write dataframe (header + rows)
         for row in dataframe_to_rows(df, index=False, header=True):
             ws.append(row)
 
-        # Apply style
-        style_worksheet_like_us(ws)
+        style_worksheet_exact_like_us(ws)
 
     buf = BytesIO()
     wb.save(buf)
@@ -181,9 +182,9 @@ if file_a and file_b:
         else:
             st.info("No names removed from Excel A.")
 
-    # Download with US-cleaner-like styling
+    # Download (EXACT same styling as US Cleaner)
     st.subheader("4) Download results")
-    out_bytes = build_styled_workbook({
+    out_bytes = build_styled_workbook_exact_like_us({
         "New_in_Excel_B": new_rows_b_out,
         "Removed_from_Excel_A": removed_rows_a_out,
     })
