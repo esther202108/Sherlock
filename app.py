@@ -12,7 +12,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # ─────────────────────────────────────────────────────────────
 st.set_page_config(page_title="ClearID Compare", layout="wide")
 st.title("🪪 ClearID Compare")
-st.caption("Compare two vendor rosters by *Full Name* and export a comparison result.")
+st.caption("Quickly identify new and removed personnel by comparing vendor rosters using Full Name")
 
 NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
