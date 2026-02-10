@@ -80,10 +80,10 @@ if file_a and file_b:
     st.write(
         f"Rows A: {len(df_a)} | Rows B: {len(df_b)} | "
         f"Unique A: {len(a_set)} | Unique B: {len(b_set)} | "
-        f"New in B: {len(new_names)} | Removed from B: {len(removed_names)}"
+        f"New in Excel B: {len(new_names)} | Removed from Excel A: {len(removed_names)}"
     )
 
-    # ---------- Views ----------
+    # ---------- Results ----------
     st.subheader("3) Results")
     c1, c2 = st.columns(2)
 
@@ -95,23 +95,23 @@ if file_a and file_b:
                 use_container_width=True
             )
         else:
-            st.info("No new names found.")
+            st.info("No new names found in Excel B.")
 
     with c2:
-        st.markdown("### ❌ Removed from Excel B")
+        st.markdown("### ❌ Removed from Excel A")
         if removed_names:
             st.dataframe(
                 pd.DataFrame({NAME_COL: removed_names}),
                 use_container_width=True
             )
         else:
-            st.info("No removed names found.")
+            st.info("No names removed from Excel A.")
 
     # ---------- Download ----------
     st.subheader("4) Download results")
     xlsx_bytes = to_xlsx_bytes({
-        "New_in_B": pd.DataFrame({NAME_COL: new_names}),
-        "Removed_from_B": pd.DataFrame({NAME_COL: removed_names}),
+        "New_in_Excel_B": pd.DataFrame({NAME_COL: new_names}),
+        "Removed_from_Excel_A": pd.DataFrame({NAME_COL: removed_names}),
     })
 
     st.download_button(
