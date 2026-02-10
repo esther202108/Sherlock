@@ -110,4 +110,70 @@ if file_a and file_b:
     df_a, _ = pick_sheet(file_a, "a")
     df_b, _ = pick_sheet(file_b, "b")
 
-    # Valida
+    # Validate required column exists
+    missing = []
+    if NAME_COL not in df_a.columns:
+        missing.append(f"Excel A missing column: '{NAME_COL}'")
+    if NAME_COL not in df_b.columns:
+        missing.append(f"Excel B missing column: '{NAME_COL}'")
+
+    if missing:
+        st.error("Cannot compare because required column is missing:\n\n- " + "\n- ".join(missing))
+        st.stop()
+
+    # Compare on normalized names
+    a_norm = normalize_name(df_a[NAME_COL])
+    b_norm = normalize_name(df_b[NAME_COL])
+
+    a_set = set(a_norm[a_norm != ""].tolist())
+    b_set = set(b_norm[b_norm != ""].tolist())
+
+    new_norm_set = b_set - a_set          # in B, not in A
+    removed_norm_set = a_set - b_set      # in A, not in B
+
+    # Keep FULL rows
+    new_rows_b = df_b.loc[b_norm.isin(new_norm_set)].copy()
+    removed_rows_a = df_a.loc[a_norm.isin(removed_norm_set)].copy()
+
+    # Reset S/N starting from 1
+    new_rows_b_out = add_serial_number(new_rows_b)
+    removed_rows_a_out = add_serial_number(removed_rows_a)
+
+    # Summary + preview (names only)
+    st.subheader("2) Summary")
+    st.write(
+        f"Rows A: {len(df_a)} | Rows B: {len(df_b)} | "
+        f"New in Excel B: {len(new_rows_b_out)} | Removed from Excel A: {len(removed_rows_a_out)}"
+    )
+
+    st.subheader("3) Results (Preview)")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### 🆕 New in Excel B")
+        if not new_rows_b_out.empty:
+            st.dataframe(new_rows_b_out[[SERIAL_COL, NAME_COL]], use_container_width=True)
+        else:
+            st.info("No new names found in Excel B.")
+    with c2:
+        st.markdown("### ❌ Removed from Excel A")
+        if not removed_rows_a_out.empty:
+            st.dataframe(removed_rows_a_out[[SERIAL_COL, NAME_COL]], use_container_width=True)
+        else:
+            st.info("No names removed from Excel A.")
+
+    # Download with US-cleaner-like styling
+    st.subheader("4) Download results")
+    out_bytes = build_styled_workbook({
+        "New_in_Excel_B": new_rows_b_out,
+        "Removed_from_Excel_A": removed_rows_a_out,
+    })
+
+    st.download_button(
+        label="📥 Download comparison (Styled XLSX)",
+        data=out_bytes,
+        file_name="nric_name_comparison_styled.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+else:
+    st.info("Upload both Excel files to compare.")
