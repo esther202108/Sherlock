@@ -192,7 +192,7 @@ if file_a and file_b:
 
         l, r = st.columns(2, gap="large")
         with l:
-            st.markdown("#### 🆕 New in Excel B")
+            st.markdown("#### 🆕 New Personnel(s) in Excel B")
             if not new_out.empty:
                 st.dataframe(
                     new_out[[SERIAL_COL, NAME_COL]],
@@ -204,7 +204,7 @@ if file_a and file_b:
                 st.success("No new names found in Excel B.")
 
         with r:
-            st.markdown("#### ❌ Removed from Excel A")
+            st.markdown("#### ❌ Removed Personnel(s) from Excel A")
             if not removed_out.empty:
                 st.dataframe(
                     removed_out[[SERIAL_COL, NAME_COL]],
