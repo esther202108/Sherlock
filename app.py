@@ -8,16 +8,16 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 # ─────────────────────────────────────────────────────────────
-# Streamlit setup
+# Streamlit setup (more professional UX)
 # ─────────────────────────────────────────────────────────────
-st.set_page_config(page_title="NRIC Name Comparator", layout="wide")
-st.title("ClearID Compare")
+st.set_page_config(page_title="ClearID Compare", layout="wide")
+st.title("🪪 ClearID Compare")
+st.caption("Compare two vendor rosters by **Full Name As Per NRIC** and export an audit-ready delta report.")
 
 NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
 
 # Fixed column widths (EXACT match to US Cleaner)
-# NOTE: This works reliably only when your output columns align with A..M positions.
 COLUMN_WIDTHS = {
     "A": 3.38,   # S/N
     "C": 23.06,
@@ -40,8 +40,12 @@ def pick_sheet(file, key_prefix: str):
     ext = file.name.lower().split(".")[-1]
     engine = "openpyxl" if ext == "xlsx" else "xlrd"
     xl = pd.ExcelFile(file, engine=engine)
-    sheet = st.selectbox(f"Sheet ({file.name})", xl.sheet_names, key=f"{key_prefix}_sheet")
-    return xl.parse(sheet)
+    sheet = st.selectbox(
+        f"Sheet ({file.name})",
+        xl.sheet_names,
+        key=f"{key_prefix}_sheet"
+    )
+    return xl.parse(sheet), sheet
 
 def normalize_name(s: pd.Series) -> pd.Series:
     return (
@@ -73,36 +77,24 @@ def apply_us_style(ws):
     normal_font = Font(name="Calibri", size=9)
     bold_font = Font(name="Calibri", size=9, bold=True)
 
-    # Borders, alignment, font
     for row in ws.iter_rows():
         for cell in row:
             cell.border = border
             cell.alignment = center
             cell.font = normal_font
 
-    # Header styling
     for col in range(1, ws.max_column + 1):
         cell = ws[f"{get_column_letter(col)}1"]
         cell.fill = header_fill
         cell.font = bold_font
 
-    # Freeze header
     ws.freeze_panes = "A2"
 
-    # Row height
     for r in range(1, ws.max_row + 1):
         ws.row_dimensions[r].height = 20
 
 def apply_fixed_column_widths(ws):
-    """
-    IMPORTANT FIX:
-    - Set widths UNCONDITIONALLY (do not check membership).
-    - Also set S/N (A) explicitly even if not in the mapping.
-    """
-    # Always force S/N column narrower
     ws.column_dimensions["A"].width = COLUMN_WIDTHS.get("A", 3.38)
-
-    # Apply the rest
     for col_letter, width in COLUMN_WIDTHS.items():
         ws.column_dimensions[col_letter].width = width
 
@@ -112,10 +104,8 @@ def build_workbook(sheets: dict[str, pd.DataFrame]) -> bytes:
 
     for name, df in sheets.items():
         ws = wb.create_sheet(title=name[:31])
-
         for row in dataframe_to_rows(df, index=False, header=True):
             ws.append(row)
-
         apply_us_style(ws)
         apply_fixed_column_widths(ws)
 
@@ -125,27 +115,53 @@ def build_workbook(sheets: dict[str, pd.DataFrame]) -> bytes:
     return buf.getvalue()
 
 # ─────────────────────────────────────────────────────────────
-# UI
+# UX Layout
 # ─────────────────────────────────────────────────────────────
-c1, c2 = st.columns(2)
-with c1:
-    file_a = st.file_uploader("Upload Excel A (baseline)", type=["xlsx", "xls"])
-with c2:
-    file_b = st.file_uploader("Upload Excel B (new list)", type=["xlsx", "xls"])
+with st.expander("How it works", expanded=False):
+    st.markdown(
+        """
+        - **Excel A (Baseline):** your previous / approved roster  
+        - **Excel B (Current):** latest roster to compare  
+        - We compare using **Full Name As Per NRIC** (trimmed, uppercased, extra spaces removed).
+        - Output includes:
+          - **New in Excel B**
+          - **Removed from Excel A**
+        """
+    )
+
+with st.container(border=True):
+    st.subheader("1) Upload files")
+    c1, c2 = st.columns(2)
+    with c1:
+        file_a = st.file_uploader("Excel A (Baseline)", type=["xlsx", "xls"])
+    with c2:
+        file_b = st.file_uploader("Excel B (Current)", type=["xlsx", "xls"])
 
 if file_a and file_b:
-    st.subheader("1) Select sheets")
-    df_a = pick_sheet(file_a, "a")
-    df_b = pick_sheet(file_b, "b")
+    with st.container(border=True):
+        st.subheader("2) Select sheets")
+        c1, c2 = st.columns(2)
+        with c1:
+            df_a, sheet_a = pick_sheet(file_a, "a")
+        with c2:
+            df_b, sheet_b = pick_sheet(file_b, "b")
 
-    if NAME_COL not in df_a.columns or NAME_COL not in df_b.columns:
-        st.error(f"Both files must contain column: '{NAME_COL}'")
-        st.stop()
+        # Validation
+        issues = []
+        if NAME_COL not in df_a.columns:
+            issues.append(f"Excel A is missing column: **{NAME_COL}**")
+        if NAME_COL not in df_b.columns:
+            issues.append(f"Excel B is missing column: **{NAME_COL}**")
 
+        if issues:
+            for msg in issues:
+                st.error(msg)
+            st.stop()
+
+    # Compare
     a_norm = normalize_name(df_a[NAME_COL])
     b_norm = normalize_name(df_b[NAME_COL])
 
-    # Remove blanks before set operations (prevents '' being treated as a name)
     a_set = set(a_norm[a_norm != ""].tolist())
     b_set = set(b_norm[b_norm != ""].tolist())
 
@@ -158,58 +174,65 @@ if file_a and file_b:
     new_out = add_serial_number(new_rows)
     removed_out = add_serial_number(removed_rows)
 
-    # Summary
-    st.subheader("2) Summary")
-    st.write(
-        f"New in Excel B: {len(new_out)} | "
-        f"Removed from Excel A: {len(removed_out)}"
-    )
+    # KPIs (more professional than plain text)
+    st.subheader("3) Summary")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Baseline rows (A)", f"{len(df_a):,}")
+    k2.metric("Current rows (B)", f"{len(df_b):,}")
+    k3.metric("New in B", f"{len(new_out):,}")
+    k4.metric("Removed from A", f"{len(removed_out):,}")
 
-    # Preview (tight S/N)
-    st.subheader("3) Results (Preview)")
-    col_cfg = {
-        SERIAL_COL: st.column_config.NumberColumn(SERIAL_COL, width="xsmall"),
-        NAME_COL: st.column_config.TextColumn(NAME_COL, width="large"),
-    }
+    # Results Preview
+    with st.container(border=True):
+        st.subheader("4) Results (Preview)")
+        col_cfg = {
+            SERIAL_COL: st.column_config.NumberColumn(SERIAL_COL, width="xsmall"),
+            NAME_COL: st.column_config.TextColumn(NAME_COL, width="large"),
+        }
 
-    l, r = st.columns(2)
-    with l:
-        st.markdown("### 🆕 New in Excel B")
-        if not new_out.empty:
-            st.dataframe(
-                new_out[[SERIAL_COL, NAME_COL]],
-                hide_index=True,
-                use_container_width=True,
-                column_config=col_cfg,
-            )
-        else:
-            st.info("No new names found in Excel B.")
+        l, r = st.columns(2, gap="large")
+        with l:
+            st.markdown("#### 🆕 New in Excel B")
+            if not new_out.empty:
+                st.dataframe(
+                    new_out[[SERIAL_COL, NAME_COL]],
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config=col_cfg,
+                )
+            else:
+                st.success("No new names found in Excel B.")
 
-    with r:
-        st.markdown("### ❌ Removed from Excel A")
-        if not removed_out.empty:
-            st.dataframe(
-                removed_out[[SERIAL_COL, NAME_COL]],
-                hide_index=True,
-                use_container_width=True,
-                column_config=col_cfg,
-            )
-        else:
-            st.info("No names removed from Excel A.")
+        with r:
+            st.markdown("#### ❌ Removed from Excel A")
+            if not removed_out.empty:
+                st.dataframe(
+                    removed_out[[SERIAL_COL, NAME_COL]],
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config=col_cfg,
+                )
+            else:
+                st.success("No names removed from Excel A.")
 
     # Download
-    st.subheader("4) Download results")
-    output = build_workbook({
-        "New_in_Excel_B": new_out,
-        "Removed_from_Excel_A": removed_out,
-    })
+    with st.container(border=True):
+        st.subheader("5) Export")
+        st.caption("Downloads an Excel file formatted to match the US Cleaner style (header, borders, freeze panes, row height, fixed widths).")
 
-    st.download_button(
-        "📥 Download comparison (Styled XLSX)",
-        data=output,
-        file_name="nric_name_comparison.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+        output = build_workbook({
+            "New_in_Excel_B": new_out,
+            "Removed_from_Excel_A": removed_out,
+        })
+
+        st.download_button(
+            "📥 Download Delta Report (Styled XLSX)",
+            data=output,
+            file_name="clearid_compare_delta.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True,
+        )
 
 else:
-    st.info("Upload both Excel files to begin.")
+    st.info("Upload both files to begin.")
