@@ -12,7 +12,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # ─────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="ClearID Check", layout="wide")
-st.title("🕵️‍♂️ Mr. Sherlock")
+st.title("🕵️‍♂️ Sherlock")
 st.caption(
     "Spotting what’s changed, one name at a time.\n"
     "Same vendor. Different clues."
