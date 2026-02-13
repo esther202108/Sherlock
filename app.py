@@ -10,13 +10,13 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # ─────────────────────────────────────────────────────────────
 # Streamlit setup (more professional UX)
 # ─────────────────────────────────────────────────────────────
-
 st.set_page_config(page_title="ClearID Check", layout="wide")
 st.title("🕵️‍♂️ Sherlock")
 st.caption(
     "Spotting what’s changed, one name at a time.\n"
     "Same vendor. Different clues."
 )
+
 NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
 
@@ -35,6 +35,12 @@ COLUMN_WIDTHS = {
     "L": 5.81,
     "M": 11.5,
 }
+
+# Common serial column variants (for input files)
+SERIAL_CANDIDATES = [
+    "S/N", "SN", "SNO", "S. NO", "S. NO.", "S NO", "S NO.", "NO", "NO.",
+    "INDEX", "SERIAL", "SERIAL NO", "SERIAL NO."
+]
 
 # ─────────────────────────────────────────────────────────────
 # Helpers
@@ -59,12 +65,51 @@ def normalize_name(s: pd.Series) -> pd.Series:
         .str.upper()
     )
 
+def detect_serial_col(df: pd.DataFrame) -> str | None:
+    # Try exact match first
+    for c in df.columns:
+        if str(c).strip().upper() in SERIAL_CANDIDATES:
+            return c
+    return None
+
+def filter_real_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Removes footer/summary rows like 'Vehicles' / 'Total Visitors' by keeping only rows
+    where the detected serial column is numeric.
+    If no serial column exists, keeps df as-is.
+    """
+    serial_col = detect_serial_col(df)
+    if not serial_col:
+        return df.copy()
+
+    s = pd.to_numeric(df[serial_col], errors="coerce")
+    mask = s.notna()  # only numeric rows
+    return df.loc[mask].copy()
+
+def count_real_records(df: pd.DataFrame) -> int:
+    """
+    Counts only real rows:
+    - If serial column exists: count numeric serial cells
+    - Else: count non-empty names (fallback)
+    """
+    serial_col = detect_serial_col(df)
+    if serial_col:
+        s = pd.to_numeric(df[serial_col], errors="coerce")
+        return int(s.notna().sum())
+
+    # Fallback: count non-empty names
+    if NAME_COL in df.columns:
+        n = normalize_name(df[NAME_COL])
+        return int((n != "").sum())
+
+    return int(len(df))
+
 def add_serial_number(df: pd.DataFrame) -> pd.DataFrame:
     df = df.reset_index(drop=True).copy()
 
     # Remove any existing serial column (common variations)
-    for c in ["S/N", "SN", "SNO", "S. NO", "S. NO.", "S NO", "S NO.", "No", "No.", "Index", "Serial", "Serial No"]:
-        if c in df.columns:
+    for c in list(df.columns):
+        if str(c).strip().upper() in SERIAL_CANDIDATES:
             df.drop(columns=[c], inplace=True)
 
     df.insert(0, SERIAL_COL, range(1, len(df) + 1))
@@ -144,9 +189,13 @@ if file_a and file_b:
         st.subheader("2) Select sheets")
         c1, c2 = st.columns(2)
         with c1:
-            df_a, sheet_a = pick_sheet(file_a, "a")
+            df_a_raw, sheet_a = pick_sheet(file_a, "a")
         with c2:
-            df_b, sheet_b = pick_sheet(file_b, "b")
+            df_b_raw, sheet_b = pick_sheet(file_b, "b")
+
+        # ✅ filter out footer rows (Vehicles / Total Visitors etc.)
+        df_a = filter_real_rows(df_a_raw)
+        df_b = filter_real_rows(df_b_raw)
 
         # Validation
         issues = []
@@ -160,7 +209,7 @@ if file_a and file_b:
                 st.error(msg)
             st.stop()
 
-    # Compare
+    # Compare (only real rows)
     a_norm = normalize_name(df_a[NAME_COL])
     b_norm = normalize_name(df_b[NAME_COL])
 
@@ -176,11 +225,11 @@ if file_a and file_b:
     new_out = add_serial_number(new_rows)
     removed_out = add_serial_number(removed_rows)
 
-    # KPIs (more professional than plain text)
+    # KPIs (✅ count only real roster rows / numeric S/N)
     st.subheader("3) Summary")
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Baseline Counts (A)", f"{len(df_a):,}")
-    k2.metric("Current Counts (B)", f"{len(df_b):,}")
+    k1.metric("Baseline Counts (A)", f"{count_real_records(df_a_raw):,}")
+    k2.metric("Current Counts (B)", f"{count_real_records(df_b_raw):,}")
     k3.metric("New Personnel(s) in B", f"{len(new_out):,}")
     k4.metric("Removed Personnel(s) from A", f"{len(removed_out):,}")
 
