@@ -20,6 +20,10 @@ st.caption(
 NAME_COL = "Full Name As Per NRIC"
 SERIAL_COL = "S/N"
 
+# ✅ Support 2 templates (SG / US)
+NAME_COL_SG = "Full Name As Per NRIC"
+NAME_COL_US = "Full Name"
+
 # Fixed column widths (EXACT match to US Cleaner)
 COLUMN_WIDTHS = {
     "A": 3.38,   # S/N
@@ -65,6 +69,15 @@ def normalize_name(s: pd.Series) -> pd.Series:
         .str.upper()
     )
 
+# ✅ Detect SG/US name column
+def detect_name_col(df: pd.DataFrame) -> str | None:
+    cols = [str(c).strip() for c in df.columns]
+    if NAME_COL_SG in cols:
+        return NAME_COL_SG
+    if NAME_COL_US in cols:
+        return NAME_COL_US
+    return None
+
 def detect_serial_col(df: pd.DataFrame) -> str | None:
     # Try exact match first
     for c in df.columns:
@@ -97,9 +110,10 @@ def count_real_records(df: pd.DataFrame) -> int:
         s = pd.to_numeric(df[serial_col], errors="coerce")
         return int(s.notna().sum())
 
-    # Fallback: count non-empty names
-    if NAME_COL in df.columns:
-        n = normalize_name(df[NAME_COL])
+    # Fallback: count non-empty names (support SG/US)
+    name_col = detect_name_col(df)
+    if name_col:
+        n = normalize_name(df[name_col])
         return int((n != "").sum())
 
     return int(len(df))
@@ -197,12 +211,15 @@ if file_a and file_b:
         df_a = filter_real_rows(df_a_raw)
         df_b = filter_real_rows(df_b_raw)
 
-        # Validation
+        # ✅ Validation (support SG/US templates)
+        name_col_a = detect_name_col(df_a)
+        name_col_b = detect_name_col(df_b)
+
         issues = []
-        if NAME_COL not in df_a.columns:
-            issues.append(f"Excel A is missing column: **{NAME_COL}**")
-        if NAME_COL not in df_b.columns:
-            issues.append(f"Excel B is missing column: **{NAME_COL}**")
+        if not name_col_a:
+            issues.append(f"Excel A must contain **{NAME_COL_SG}** (SG) or **{NAME_COL_US}** (US).")
+        if not name_col_b:
+            issues.append(f"Excel B must contain **{NAME_COL_SG}** (SG) or **{NAME_COL_US}** (US).")
 
         if issues:
             for msg in issues:
@@ -210,8 +227,8 @@ if file_a and file_b:
             st.stop()
 
     # Compare (only real rows)
-    a_norm = normalize_name(df_a[NAME_COL])
-    b_norm = normalize_name(df_b[NAME_COL])
+    a_norm = normalize_name(df_a[name_col_a])
+    b_norm = normalize_name(df_b[name_col_b])
 
     a_set = set(a_norm[a_norm != ""].tolist())
     b_set = set(b_norm[b_norm != ""].tolist())
@@ -221,6 +238,10 @@ if file_a and file_b:
 
     new_rows = df_b.loc[b_norm.isin(new_set)].copy()
     removed_rows = df_a.loc[a_norm.isin(removed_set)].copy()
+
+    # ✅ Standardize output name column to NAME_COL (keeps downstream preview/export unchanged)
+    new_rows = new_rows.rename(columns={name_col_b: NAME_COL})
+    removed_rows = removed_rows.rename(columns={name_col_a: NAME_COL})
 
     new_out = add_serial_number(new_rows)
     removed_out = add_serial_number(removed_rows)
