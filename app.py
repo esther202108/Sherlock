@@ -115,22 +115,19 @@ def filter_real_rows(df: pd.DataFrame) -> pd.DataFrame:
     
 def count_real_records(df: pd.DataFrame) -> int:
     """
-    Counts only real rows:
-    - If serial column exists: count numeric serial cells
-    - Else: count non-empty names (fallback)
+    Counts real roster rows consistently with filter_real_rows logic.
     """
-    serial_col = detect_serial_col(df)
-    if serial_col:
-        s = pd.to_numeric(df[serial_col], errors="coerce")
-        return int(s.notna().sum())
 
-    # Fallback: count non-empty names (support SG/US)
-    name_col = detect_name_col(df)
+    # Apply same filtering logic first
+    df_filtered = filter_real_rows(df)
+
+    name_col = detect_name_col(df_filtered)
     if name_col:
-        n = normalize_name(df[name_col])
+        n = normalize_name(df_filtered[name_col])
         return int((n != "").sum())
 
-    return int(len(df))
+    return int(len(df_filtered))
+
 
 def add_serial_number(df: pd.DataFrame) -> pd.DataFrame:
     df = df.reset_index(drop=True).copy()
