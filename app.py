@@ -87,18 +87,31 @@ def detect_serial_col(df: pd.DataFrame) -> str | None:
 
 def filter_real_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Removes footer/summary rows like 'Vehicles' / 'Total Visitors' by keeping only rows
-    where the detected serial column is numeric.
-    If no serial column exists, keeps df as-is.
+    Removes footer/summary rows like 'Vehicles' / 'Total Visitors'.
+
+    Rule:
+    - If serial column exists:
+        keep rows where serial is numeric
+        OR serial is blank BUT name column is not blank (manual-added row)
+    - If no serial column exists: keep df as-is
     """
     serial_col = detect_serial_col(df)
     if not serial_col:
         return df.copy()
 
     s = pd.to_numeric(df[serial_col], errors="coerce")
-    mask = s.notna()  # only numeric rows
-    return df.loc[mask].copy()
+    numeric_mask = s.notna()
 
+    # Allow rows with blank serial if a valid SG/US name column exists and is not empty
+    name_col = detect_name_col(df)
+    if name_col:
+        name_mask = normalize_name(df[name_col]) != ""
+        keep_mask = numeric_mask | (s.isna() & name_mask)
+    else:
+        keep_mask = numeric_mask
+
+    return df.loc[keep_mask].copy()
+    
 def count_real_records(df: pd.DataFrame) -> int:
     """
     Counts only real rows:
