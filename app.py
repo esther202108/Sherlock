@@ -111,6 +111,7 @@ def filter_real_rows(df: pd.DataFrame) -> pd.DataFrame:
         keep_mask = numeric_mask
 
     return df.loc[keep_mask].copy()
+
     
 def count_real_records(df: pd.DataFrame) -> int:
     """
