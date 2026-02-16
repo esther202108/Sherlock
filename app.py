@@ -10,7 +10,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 # ─────────────────────────────────────────────────────────────
 # Streamlit setup (more professional UX)
 # ─────────────────────────────────────────────────────────────
-st.set_page_config(page_title="ClearID Check", layout="wide")
+st.set_page_config(page_title="Sherlock - Compare Vendor Files", layout="wide")
 st.title("🕵️‍♂️ Sherlock")
 st.caption(
     "Spotting what’s changed, one name at a time.\n"
