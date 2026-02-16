@@ -79,6 +79,7 @@ def detect_name_col(df: pd.DataFrame) -> str | None:
     return None
 
 def detect_serial_col(df: pd.DataFrame) -> str | None:
+    # Try exact match first
     for c in df.columns:
         if str(c).strip().upper() in SERIAL_CANDIDATES:
             return c
@@ -86,42 +87,36 @@ def detect_serial_col(df: pd.DataFrame) -> str | None:
 
 def filter_real_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Removes footer/summary rows like 'Vehicles' / 'Total Visitors'.
-
-    Rule:
-    - If serial column exists:
-        keep rows where serial is numeric
-        OR serial is blank BUT name column is not blank (manual-added row)
-    - If no serial column exists: keep df as-is
+    Removes footer/summary rows like 'Vehicles' / 'Total Visitors' by keeping only rows
+    where the detected serial column is numeric.
+    If no serial column exists, keeps df as-is.
     """
     serial_col = detect_serial_col(df)
     if not serial_col:
         return df.copy()
 
     s = pd.to_numeric(df[serial_col], errors="coerce")
-    numeric_mask = s.notna()
-
-    name_col = detect_name_col(df)
-    if name_col:
-        name_mask = normalize_name(df[name_col]) != ""
-        keep_mask = numeric_mask | (s.isna() & name_mask)
-    else:
-        keep_mask = numeric_mask
-
-    return df.loc[keep_mask].copy()
+    mask = s.notna()  # only numeric rows
+    return df.loc[mask].copy()
 
 def count_real_records(df: pd.DataFrame) -> int:
     """
-    Counts real roster rows consistently with filter_real_rows logic.
+    Counts only real rows:
+    - If serial column exists: count numeric serial cells
+    - Else: count non-empty names (fallback)
     """
-    df_filtered = filter_real_rows(df)
+    serial_col = detect_serial_col(df)
+    if serial_col:
+        s = pd.to_numeric(df[serial_col], errors="coerce")
+        return int(s.notna().sum())
 
-    name_col = detect_name_col(df_filtered)
+    # Fallback: count non-empty names (support SG/US)
+    name_col = detect_name_col(df)
     if name_col:
-        n = normalize_name(df_filtered[name_col])
+        n = normalize_name(df[name_col])
         return int((n != "").sum())
 
-    return int(len(df_filtered))
+    return int(len(df))
 
 def add_serial_number(df: pd.DataFrame) -> pd.DataFrame:
     df = df.reset_index(drop=True).copy()
@@ -251,7 +246,7 @@ if file_a and file_b:
     new_out = add_serial_number(new_rows)
     removed_out = add_serial_number(removed_rows)
 
-    # KPIs (✅ count only real roster rows / includes blank-serial rows with valid names)
+    # KPIs (✅ count only real roster rows / numeric S/N)
     st.subheader("3) Summary")
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Baseline Counts (A)", f"{count_real_records(df_a_raw):,}")
